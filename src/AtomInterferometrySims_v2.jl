@@ -1,9 +1,9 @@
 module AtomInterferometrySims_v2
 
 export atom_phase_path_int, atom_phase_path_int_test, atom_phase_path_int_shear,Constants, simple_test, test_atom_phase_path_int, init_vel, init_pos
-export atom_phase_path_seq, test_it
+export atom_phase_path_seq, test_it, plot2d, plot1d,plotPhase
 using DifferentialEquations, Parameters, ParameterizedFunctions, LinearAlgebra, Distributions
-using BenchmarkTools, Test, CSV, DataFrames, FastGaussQuadrature, StaticArrays
+using BenchmarkTools, Test, CSV, DataFrames, FastGaussQuadrature, StaticArrays, Plots, StatsPlots
 
 @with_kw struct Constants
     #=========================================================================
@@ -56,8 +56,6 @@ function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v
     =======#
     
     # Main code
-    N = 1023 # pixel num of phase map (consider moving to script/input)
-
     r0 = SA_F64[r0[1],r0[2],r0[3]]
     v0 = SA_F64[v0[1],v0[2],v0[3]]
     # Kick velocity
@@ -122,7 +120,7 @@ end
 
 
 # for a sequence of mirror pulses (with external phasemap)
-function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, phase_shear::Array, constants::Constants = Constants())
+function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, phase_shear::Array, size::Float64,  N::Int, constants::Constants = Constants())
     #===============================================================
     ******     Calculating atom phase using path integral approach.
     Required inputs: 
@@ -139,8 +137,6 @@ function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v
     ===================================================================#
     
     # Main code
-    N = 1023 # pixel num of phase map (consider moving to script/input)
-
     r0 = SA_F64[r0[1],r0[2],r0[3]]
     v0 = SA_F64[v0[1],v0[2],v0[3]]
     # Kick velocity
@@ -172,14 +168,14 @@ function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v
 
         # add laser phase from upper arm
         ϕlaser +=   d[1] * phase_laser(rU, t0 + idx*T, phi_map, size, N, constants, k_eff)
-        print("hello\n")
+        
         # add laser phase from lower arm
         ϕlaser += - d[2] * phase_laser(rL, t0 + idx*T, phi_map, size, N, constants, k_eff)
-        print("hi\n")
+        
         Sdiff, rU, vU, rL, vL = action_diff(rU, rL, 
                                             vU + d[1]*v_k, vL + d[2]*v_k, # velocity kick applied according to seq
                                             SA_F64[t0 + idx*T, t0 + (idx+1)*T], constants, t, w)
-        print("now what \n")
+        
         ϕprop += Sdiff
     end
 
@@ -199,12 +195,12 @@ function atom_phase_path_seq(seq::Vector{Vector{Float64}},r0::Vector{Float64}, v
     
     # Add together propagation phase, laser phase, and separation phase for final total phase difference
     ϕout = ϕprop + ϕlaser + ϕsep
-    print("here?\n")
-    return ϕout
+    
+    return ϕout, collect(rU)
 end
 
 #==============================================
-    processssss: MZ-single shot Interferometer 
+  processssss: MZ-single shot Interferometer 
 ==============================================#
 # basic mode
 function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
@@ -246,7 +242,7 @@ function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float
 end
 
 # use external phase map input
-function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, constants::Constants = Constants())
+function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, N::Int, constants::Constants = Constants())
     #= Calculating atom phase using path integral approach.
     Required inputs: 
     r0: [x, y, z] coordinates
@@ -260,8 +256,6 @@ function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float
     =#
     
     # Main code
-    N = 1023
-    #println(1)
     r0 = SA_F64[r0[1],r0[2],r0[3]]
     v0 = SA_F64[v0[1],v0[2],v0[3]]
     # Kick velocity
@@ -311,7 +305,7 @@ function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float
 end
 
 # use external phase map input, w/ phase shear
-function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array,phi_map_shear::Array, size::Float64, constants::Constants = Constants())
+function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array,phi_map_shear::Array, size::Float64, N::Int, constants::Constants = Constants())
     #= Calculating atom phase using path integral approach.
     Required inputs: 
     r0: [x, y, z] coordinates
@@ -325,8 +319,7 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
     =#
     
     # Main code
-    N = 1023
-    #println(1)
+
     r0 = SA_F64[r0[1],r0[2],r0[3]]
     v0 = SA_F64[v0[1],v0[2],v0[3]]
     # Kick velocity
@@ -355,13 +348,7 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
         +       phase_laser(rE, 2*T, phi_map+phi_map_shear, size, N, constants, k_eff)
         -       phase_laser(rB,   T, phi_map, size, N, constants, k_eff))
   
-    #=
-    phi_laser= (phase_laser(r0, k_eff)
-        -       phase_laser(rC, T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
-        -       phase_laser(rB, k_eff))
-    =#
-    
+
     # Determine the momentum for the endpoint of each arm
     pD = constants.m * (vD + cross(constants.Omega, rD + constants.Re))
     pE = constants.m * (vE + cross(constants.Omega, rE + constants.Re))
@@ -374,10 +361,113 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
 
     return phase_output,collect(rE)#, rD, rE, vD, vE
 end
+#=================================
+            Plot
+==================================#
 
-#==========================
-    Internal Functions
-==========================#
+function plot2d(pos_out::Matrix{Float64},phase_out::Vector{Float64})
+    mask = [rand() > cos(x)^2 for x in phase_out]
+
+    final_pos = pos_out
+    
+    zsig = -minimum(final_pos[:,2]) * 1e3 * 1.3 # rescale to mm, with 30% plot margin
+    prange = (-zsig,zsig)
+    
+    p1 = scatter(
+        final_pos[:,1][mask]*1e3,final_pos[:,2][mask]*1e3,
+        xlims = prange,ylims = prange,
+        xlabel = "X (mm)", ylabel = "Z (mm)",
+        aspect_ratio = :equal,framestyle = :box,
+        markershape=:circle, markersize=.1,
+        xlabelfontsize=8,ylabelfontsize=8,
+        legend = false,
+        grid = false
+    )
+    
+    p2 = scatter(
+        final_pos[:,1][.!mask]*1e3,final_pos[:,2][.!mask]*1e3,
+        xlims = prange,ylims = prange,
+        xlabel = "X (mm)", ylabel = "Z (mm)",
+        aspect_ratio = :equal,framestyle = :box,
+        markershape=:circle, markersize=.1,
+        xlabelfontsize=8,ylabelfontsize=8,
+        legend = false,
+        grid = false)
+    
+    p = plot(p1,p2,layout = (2,1),size = (200,400),dpi = 500)
+    display(p)
+    return p
+
+
+end
+
+function plot1d(pos_out::Matrix{Float64},phase_out::Vector{Float64},axis::Int,bin::Int)
+    mask = [rand() > cos(x)^2 for x in phase_out]
+
+    zsig = -minimum(pos_out[:,2]) * 1e3 * 1.2 # rescale to mm, with 30% plot margin
+    prange = (-zsig,zsig)
+
+    h1 = density(
+        pos_out[:,axis][mask]*1e3,
+        xlims = prange,
+        ylims = (0,0.15),
+        #xlims = (-15,15),
+        xlabel = "X (mm)", ylabel = "photon density",
+        xlabelfontsize=8,ylabelfontsize=8,
+        #aspect_ratio = :equal,framestyle = :box,
+        #markershape=:circle, markersize=.1,
+        #bin = bin,
+        legend = false,
+        grid = false)
+    
+    h2 = density(
+        pos_out[:,axis][.!mask]*1e3,
+        xlims = prange,
+        ylims = (0,0.15),
+        xlabel = "X (mm)", ylabel = "photon density",
+        xlabelfontsize=8,ylabelfontsize=8,
+        #aspect_ratio = :equal,framestyle = :box,
+        #markershape=:circle, markersize=.1,
+        #bin = bin,
+        
+        legend = false,
+        grid = false)
+    
+    p = plot(h1,h2,layout = (2,1),size = (300,400),dpi = 500)
+    display(p)
+    return p
+end
+
+function plotPhase(xrange::LinRange{Float64, Int64},aberration::Matrix{Float64},kx::Float64,δ::Float64 ,phase_shear::Matrix{Float64},A::Float64)
+    xrange = xrange*1e3
+    plim = (minimum(xrange),maximum(xrange))
+    psize = 200
+    p1 = heatmap(xrange,xrange,aberration,aspect_ratio = :equal,
+                xlims = plim, ylims = plim, framestyle = :box, #size = (psize,psize),
+                xlabel = "X (mm)", ylabel = "Y (mm)",
+                title = "aberration\nkx = $(round(kx,digits=2)), δ = $(round(δ,digits=2))",
+                xlabelfontsize=7,ylabelfontsize=7,titlefontsize=10)
+
+    p2 = heatmap(xrange,xrange,phase_shear,aspect_ratio=:equal,
+                xlims = plim, ylims = plim, framestyle = :box,#size = (psize,psize),
+                xlabel = "X (mm)", ylabel = "Y (mm)",
+                title = "phase shear\nA = $(round(A,digits=2))",
+                xlabelfontsize=7,ylabelfontsize=7,titlefontsize=10)
+
+    p3 = heatmap(xrange,xrange,aberration+phase_shear,aspect_ratio = :equal,
+                xlims = plim, ylims = plim, framestyle = :box,#size = (psize,psize),
+                xlabel = "X (mm)", ylabel = "Y (mm)",
+                title = "total phase",
+                xlabelfontsize=7,ylabelfontsize=7,titlefontsize=10)
+
+    plot(p1,p2,p3,layout = (1,3),size=(psize*4,psize),margin=2Plots.mm,dpi = 500)
+
+
+end
+
+#===================================
+        Internal Functions
+====================================#
 function phase_sep(rD, rE, vD, vE, m, Omega, Re, hbar) #500ns
     # Determine the momentum for the endpoint of each arm
     pD = m * (vD + cross(Omega, rD + Re))
@@ -501,7 +591,7 @@ end
 function rssq(A)
     return sqrt(sum(A.^2))
 end
-
+#=
 function test_atom_phase_path_int(tolerance::Float64) 
     
     MC_phase = CSV.File("./test/data/MC_phaseout.csv";header = false,types = BigFloat ).Column1
@@ -555,7 +645,7 @@ function test_atom_phase_path_int(tolerance::Float64)
     end
     return nothing #reltol_phase
 end
-
+=#
 function init_vel(T,num)
 
     # Input must be in K.

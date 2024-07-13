@@ -460,8 +460,9 @@ function plotPhase(xrange::LinRange{Float64, Int64},aberration::Matrix{Float64},
                 title = "total phase",
                 xlabelfontsize=7,ylabelfontsize=7,titlefontsize=10)
 
-    plot(p1,p2,p3,layout = (1,3),size=(psize*4,psize),margin=2Plots.mm,dpi = 500)
-
+    p = plot(p1,p2,p3,layout = (1,3),size=(psize*4,psize),margin=2Plots.mm,dpi = 500);
+    display(p)
+    return p
 
 end
 

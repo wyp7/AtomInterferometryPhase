@@ -1,2 +1,2 @@
 # AtomInterferometryPhase
-AtomInterferometryPhase
+Based on analytial atom interferometry phase calculation, we this module allow us to perform efficient numerical simulation with high precision for atom interferometer phase. It is designed to be agile and customizable for various interferometry sequence configuration. The demo script showcases using point-source interferometry to sample spatial distribution of laser wavefront aberration.

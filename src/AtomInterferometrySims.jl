@@ -32,7 +32,7 @@ functions at the end of the file
 end
 
 function test_it(x,y)
-    return x+y+1
+    return x+y+1000
 end
 
 function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
@@ -491,10 +491,10 @@ function init_pos(R,num)
     # the length of initial position vectors are uniformly distributed in[0 R]
     # where R is the defined radius of the atom cloud
     
-    #r = 2*(rand(num,3).-0.5)
-    #r = r./norm.(eachrow(r))
-    #r_out = r.*rand(num,1).*R
-    r_out = R+num
+    r = 2*(rand(num,3).-0.5)
+    r = r./norm.(eachrow(r))
+    r_out = r.*rand(num,1).*R
+    
     return r_out
 end
 

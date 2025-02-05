@@ -35,6 +35,8 @@ function test_it(x,y)
     return x+y+1000
 end
 
+unity(r::Vector{Float64}) = 1
+
 function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
     
     r0 = SVector{3}(r0) 
@@ -203,7 +205,7 @@ function atom_phase_path_int_test(r0::Vector{Float64}, v0::Vector{Float64}, t0::
     return phase_output,collect(rE)#, rD, rE, vD, vE
 end
 
-function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array,phi_map_shear::Array, size::Float64, constants::Constants = Constants())
+function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array,phi_map_shear::Array, size::Float64, int_map_func::Function=unity, constants::Constants = Constants())
     #= Calculating atom phase using path integral approach.
     Required inputs: 
     r0: [x, y, z] coordinates
@@ -229,12 +231,59 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
 
     # Difference between the accumulated phase between the top arm and the bottom arm from first beamsplitter
     # pulse until the mirror pulse
+    ## N.B. both arms of the interferometer begin in the same location (r0) with the same velocity (v0), 
+    ## the excited arm gets a momentum kick (v_k), while the arm that remains in the ground state gets
+    ## no kick. This basically assumes all LMT is delivered at once
     SdiffCB, rC, vC, rB, vB = action_diff(r0, r0, v0 + v_k,       v0, SA_F64[  t0, t0 + T], constants,t,w)
+    ## N.B. rC / vC : final position / velocity of excited/upper arm
+    ## N.B. rB / vB : final position / velocity of  ground/lower arm
+
+
+    ## Here, we can ask the question: given the atom's position, is it likely to have survived n pulses
+    ## that have some nonzero inefficiency. If so continue, if not:
+    ## (?) - return 0 phase difference
+    ## (?) - put a non-physical position that will be trimmed later
+
+    ## Find the probability of an atom at these positions surviving n LMT orders (2x pulses each order)
+    ## But wait, this is only the first half of the sequence, so its really only seeing n pulses
+    pC = int_map_func(rC[1:2]).^(1*n)
+    pB = int_map_func(rB[1:2]).^(1*n)
+
+    ## Roll a die for each position and see if it dies. If so, return NaNs to be excluded later
+    if ( (rand(1)[1]>pB) || (rand(1)[1]>pC) ) 
+        return NaN, collect(SA_F64[NaN,NaN,NaN])
+    end
 
     # Phase difference from the mirror pulse until the final beamsplitter pulse
+    ## N.B. Now we start from the end of the first half-sequence (i.e., from the mirror pulse to the end)
+    ## Now, the two arms are at different locations (rC and rB) with different velocities. We want to conlcude
+    ## this integral before the final BS pulse. The final BS pulse will add 1 (n)hk of momentum to the upper arm
+    ## and remove 1 (n)hk of momentum from the lower arm. So the final velocities before the last BS pulse
+    ## is 
+    ## (upper):  final velocity (from above) of excited/upper arm MINUS 1 (n)hk
+    ## (lower):  final velocity (from above) of  ground/lower arm PLUS  1 (n)hk
     SdiffED, rE, vE, rD, vD = action_diff(rC, rB, vC - v_k, vB + v_k, SA_F64[t0+T, t0+2*T], constants,t,w)
+    ## N.B. rE / vE : final position / velocity of upper output port
+    ## N.B. rD / vD : final position / velocity of lower output port
+
+
+    ## Here, we once again ask the question: given the atom's position, is it likely to have survived n pulses
+    ## that have some nonzero inefficiency. If so continue, if not:
+    ## (?) - return 0 phase difference
+    ## (?) - put a non-physical position that will be trimmed later
+    
+    ## Find the probability of an atom at these positions surviving n LMT orders (2x pulses each order)
+    ## But wait, this is only the first half of the sequence, so its really only seeing n pulses
+    pE = int_map_func(rE[1:2]).^(1*n)
+    pD = int_map_func(rD[1:2]).^(1*n)
+
+    ## Roll a die for each position and see if it dies. If so, return NaNs to be excluded later
+    if ( (rand(1)[1]>pB) || (rand(1)[1]>pC) ) 
+        return NaN, collect(SA_F64[NaN,NaN,NaN])
+    end
 
     # Final beamsplitter pulse
+    ## N.B. Now we apply the momentum kick from the final BS pulse only to the upper output port
     vE = vE + v_k 
 
     # Add together to get the propagation phase difference
@@ -323,6 +372,10 @@ function action_diff(r01::SVector{3,Float64}, r02::SVector{3,Float64},
     tspan::SVector{2,Float64}, constants::Constants,t::Array{Float64},w::Array{Float64})
     #= This function is used for the propagation phase. It outputs the difference instead of the two integrals separately 
     to avoid truncation errors from subtracting two large numbers to get a small difference. =#
+    ## N.B. While it doesn't particulalry matter (I think), the way this is used in the atom_phase_path_int
+    ## methods assumes:
+    ## r01 / v01 is the excited arm initial position and velocity
+    ## r02 / v02 is the ground  arm initial position and velocity
     p = SA_F64[constants.yOmega, constants.zOmega, constants.Re_val, constants.g_val, 
     constants.Txx, constants.Tyy, constants.Tzz, constants.Qzzz, constants.Szzzz]
     ff1, _, _, _ , f1 = get_rv(r01,v01,tspan,p,t,w)

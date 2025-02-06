@@ -44,175 +44,7 @@ function GenerateIntensityMap(r::Vector{Float64},shape::Function, params::Vector
    return shape(r,params...) 
 end
 
-function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
-    
-    r0 = SVector{3}(r0) 
-    v0 = SVector{3}(v0)
-
-    # Kick velocity
-    k_eff = n*constants.k
-    v_k = SVector{3,Float64}(0.,0.,constants.hbar*k_eff/constants.m) #350ns
-
-    t, w = gausslegendre(4000)
-    # Difference between the accumulated phase between the top arm and the bottom arm from first beamsplitter
-    # pulse until the mirror pulse
-    SdiffCB, rC, vC, rB, vB = action_diff(r0, r0, v0 + v_k,       v0, SA_F64[  t0, t0 + T], constants,t,w)
-
-    # Phase difference from the mirror pulse until the final beamsplitter pulse
-    SdiffED, rE, vE, rD, vD = action_diff(rC, rB, vC - v_k, vB + v_k, SA_F64[t0+T, t0+2*T], constants,t,w)
-
-    # Final beamsplitter pulse
-    vE = vE + v_k 
-
-    # Add together to get the propagation phase difference
-    phi_prop = SdiffCB + SdiffED
-
-    # Calculate the phase contribution from the laser 
-    phi_laser= (phase_laser(r0, k_eff) 
-        -       phase_laser(rC, k_eff)
-        +       phase_laser(rE, k_eff)
-        -       phase_laser(rB, k_eff))
-
-    # Separation phase
-    phi_sep = phase_sep(rD, rE, vD, vE, constants.m, constants.Omega, constants.Re, constants.hbar)
-
-    # Add together propagation phase, laser phase, and separation phase for final total phase difference
-    phase_output = phi_prop + phi_laser + phi_sep
-
-    return phase_output#, [phi_prop,phi_laser,phi_sep]#rD, rE, phi_sep#pD, pE
-end
-
-# use external phase map input
-function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, constants::Constants = Constants())
-    #= Calculating atom phase using path integral approach.
-    Required inputs: 
-    r0: [x, y, z] coordinates
-    v0: [vx, vy, vz] coordinates
-    t0: start time
-    T:  time between pulses
-    n:  number of ħk kicks (instantaneous)  
-    Optional inputs:
-    phi_map: phase map
-    size: size of grid for phase map (in meters)
-    =#
-    
-    # Main code
-    N = 1023
-    #println(1)
-    r0 = SA_F64[r0[1],r0[2],r0[3]]
-    v0 = SA_F64[v0[1],v0[2],v0[3]]
-    # Kick velocity
-    k_eff = n*constants.k
-    v_k = SA_F64[0., 0., constants.hbar*k_eff/constants.m]
-
-    t, w = gausslegendre(4000)
-
-    # Difference between the accumulated phase between the top arm and the bottom arm from first beamsplitter
-    # pulse until the mirror pulse
-    SdiffCB, rC, vC, rB, vB = action_diff(r0, r0, v0 + v_k,       v0, SA_F64[  t0, t0 + T], constants,t,w)
-
-    # Phase difference from the mirror pulse until the final beamsplitter pulse
-    SdiffED, rE, vE, rD, vD = action_diff(rC, rB, vC - v_k, vB + v_k, SA_F64[t0+T, t0+2*T], constants,t,w)
-
-    # Final beamsplitter pulse
-    vE = vE + v_k 
-
-    # Add together to get the propagation phase difference
-    phi_prop = SdiffCB + SdiffED
-
-    # Calculate the phase contribution from the laser during the pulses if there is a map
-    
-    phi_laser= (phase_laser(r0,   0, phi_map, size, N, constants, k_eff) 
-        -       phase_laser(rC,   T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
-        -       phase_laser(rB,   T, phi_map, size, N, constants, k_eff))
-  
-    #=
-    phi_laser= (phase_laser(r0, k_eff)
-        -       phase_laser(rC, T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
-        -       phase_laser(rB, k_eff))
-    =#
-    
-    # Determine the momentum for the endpoint of each arm
-    pD = constants.m * (vD + cross(constants.Omega, rD + constants.Re))
-    pE = constants.m * (vE + cross(constants.Omega, rE + constants.Re))
-
-    # Use final momenta to get separation phase
-    phi_sep = dot((pD + pE), rD - rE)/(2*constants.hbar)
-
-    # Add together propagation phase, laser phase, and separation phase for final total phase difference
-    phase_output = phi_prop + phi_laser + phi_sep
-
-    return phase_output,collect(rE)#, rD, rE, vD, vE
-end
-
-function atom_phase_path_int_test(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, constants::Constants = Constants())
-    #= Calculating atom phase using path integral approach.
-    Required inputs: 
-    r0: [x, y, z] coordinates
-    v0: [vx, vy, vz] coordinates
-    t0: start time
-    T:  time between pulses
-    n:  number of ħk kicks (instantaneous)  
-    Optional inputs:
-    phi_map: phase map
-    size: size of grid for phase map (in meters)
-    =#
-    
-    # Main code
-    N = 1023
-    #println(1)
-    r0 = SA_F64[r0[1],r0[2],r0[3]]
-    v0 = SA_F64[v0[1],v0[2],v0[3]]
-    # Kick velocity
-    k_eff = n*constants.k
-    v_k = SA_F64[0., 0., constants.hbar*k_eff/constants.m]
-
-    t, w = gausslegendre(4000)
-
-    # Difference between the accumulated phase between the top arm and the bottom arm from first beamsplitter
-    # pulse until the mirror pulse
-    SdiffCB, rC, vC, rB, vB = action_diff(r0, r0, v0 + v_k,       v0, SA_F64[  t0, t0 + T], constants,t,w)
-
-    # Phase difference from the mirror pulse until the final beamsplitter pulse
-    SdiffED, rE, vE, rD, vD = action_diff(rC, rB, vC - v_k, vB + v_k, SA_F64[t0+T, t0+2*T], constants,t,w)
-
-    # Final beamsplitter pulse
-    vE = vE + v_k 
-
-    # Add together to get the propagation phase difference
-    phi_prop = SdiffCB + SdiffED
-
-    # Calculate the phase contribution from the laser during the pulses if there is a map
-    #=
-    phi_laser= (phase_laser(r0,   0, phi_map, size, N, constants, k_eff) 
-        -       phase_laser(rC,   T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
-        -       phase_laser(rB,   T, phi_map, size, N, constants, k_eff))
-  =#
-    
-    phi_laser= (phase_laser(r0, k_eff)
-        -       phase_laser(rC, T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
-        -       phase_laser(rB, T, phi_map, size, N, constants, k_eff))
-        
-    
-    
-    # Determine the momentum for the endpoint of each arm
-    pD = constants.m * (vD + cross(constants.Omega, rD + constants.Re))
-    pE = constants.m * (vE + cross(constants.Omega, rE + constants.Re))
-
-    # Use final momenta to get separation phase
-    phi_sep = dot((pD + pE), rD - rE)/(2*constants.hbar)
-
-    # Add together propagation phase, laser phase, and separation phase for final total phase difference
-    phase_output = phi_prop + phi_laser + phi_sep
-
-    return phase_output,collect(rE)#, rD, rE, vD, vE
-end
-
-function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array,phi_map_shear::Array, size::Float64, int_map_func::Function=unity, constants::Constants = Constants())
+function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, phi_map_shear::Array, size::Float64, int_map_func::Function=unity, constants::Constants = Constants())
     #= Calculating atom phase using path integral approach.
     Required inputs: 
     r0: [x, y, z] coordinates
@@ -247,9 +79,7 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
 
 
     ## Here, we can ask the question: given the atom's position, is it likely to have survived n pulses
-    ## that have some nonzero inefficiency. If so continue, if not:
-    ## (?) - return 0 phase difference
-    ## (?) - put a non-physical position that will be trimmed later
+    ## that have some nonzero inefficiency. If so continue, if not: return  a non-physical position that will be trimmed later
 
     ## Find the probability of an atom at these positions surviving n LMT orders (2x pulses each order)
     ## But wait, this is only the first half of the sequence, so its really only seeing n pulses
@@ -275,9 +105,7 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
 
 
     ## Here, we once again ask the question: given the atom's position, is it likely to have survived n pulses
-    ## that have some nonzero inefficiency. If so continue, if not:
-    ## (?) - return 0 phase difference
-    ## (?) - put a non-physical position that will be trimmed later
+    ## that have some nonzero inefficiency. If so continue, if not: return a non-physical position that will be trimmed later
     
     ## Find the probability of an atom at these positions surviving n LMT orders (2x pulses each order)
     ## But wait, this is only the first half of the sequence, so its really only seeing n pulses
@@ -298,24 +126,20 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
 
     # Calculate the phase contribution from the laser during the pulses if there is a map
     
-    phi_laser= (phase_laser(r0,   0, phi_map, size, N, constants, k_eff) 
-        -       phase_laser(rC,   T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map+phi_map_shear, size, N, constants, k_eff)
-        -       phase_laser(rB,   T, phi_map, size, N, constants, k_eff))
+    phi_laser= (phase_laser(r0,k_eff,   0, phi_map, size, N, constants) 
+        -       phase_laser(rC,k_eff,   T, phi_map, size, N, constants)
+        +       phase_laser(rE,k_eff, 2*T, phi_map+phi_map_shear, size, N, constants)
+        -       phase_laser(rB,k_eff,   T, phi_map, size, N, constants))
   
     #=
     phi_laser= (phase_laser(r0, k_eff)
-        -       phase_laser(rC, T, phi_map, size, N, constants, k_eff)
-        +       phase_laser(rE, 2*T, phi_map, size, N, constants, k_eff)
+        -       phase_laser(rC, k_eff,   T, phi_map, size, N, constants)
+        +       phase_laser(rE, k_eff, 2*T, phi_map, size, N, constants)
         -       phase_laser(rB, k_eff))
     =#
     
-    # Determine the momentum for the endpoint of each arm
-    pD = constants.m * (vD + cross(constants.Omega, rD + constants.Re))
-    pE = constants.m * (vE + cross(constants.Omega, rE + constants.Re))
-
     # Use final momenta to get separation phase
-    phi_sep = dot((pD + pE), rD - rE)/(2*constants.hbar)
+    phi_sep = phase_sep(rD, rE, vD, vE)
 
     # Add together propagation phase, laser phase, and separation phase for final total phase difference
     phase_output = phi_prop + phi_laser + phi_sep
@@ -323,15 +147,44 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
     return phase_output,collect(rE)#, rD, rE, vD, vE
 end
 
+function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
+    #= Calculating atom phase using path integral approach.
+    # use external phase map input
+    # no phase shear
+    # no phi map
+    # no intensity map
+    =#
+    return atom_phase_path_int_test(r0, v0, t0, T, n, zeros(2,3), zeros(2,3), 0, unity, constants)
+end
+
+function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, phi_map::Array, size::Float64, constants::Constants = Constants())
+    #= Calculating atom phase using path integral approach.
+    # use external phase map input
+    # no phase shear
+    # no intensity map
+    Required inputs: 
+    r0: [x, y, z] coordinates
+    v0: [vx, vy, vz] coordinates
+    t0: start time
+    T:  time between pulses
+    n:  number of ħk kicks (instantaneous)  
+    Optional inputs:
+    phi_map: phase map
+    size: size of grid for phase map (in meters)
+    =#
+
+    return atom_phase_path_int_test(r0, v0, t0, T, n, phi_map, zeros(2,3), size, unity, constants)
+end
+
 # Internal Functions
 
-function phase_sep(rD, rE, vD, vE, m, Omega, Re, hbar) #500ns
+function phase_sep(rD, rE, vD, vE, constants::Constants = Constants()) #500ns
     # Determine the momentum for the endpoint of each arm
-    pD = m * (vD + cross(Omega, rD + Re))
-    pE = m * (vE + cross(Omega, rE + Re))
+    pD = constants.m * (vD + cross(constants.Omega, rD + constants.Re))
+    pE = constants.m * (vE + cross(constants.Omega, rE + constants.Re))
 
     # Use final momenta to get separation phase
-    phi_sep = 1/(2*hbar) * dot((pD + pE), rD - rE)
+    phi_sep = 1/(2*constants.hbar) * dot((pD + pE), rD - rE)
     return phi_sep
 end
 
@@ -341,7 +194,7 @@ function phase_laser(r::SVector{3,Float64}, k_eff::Float64) #7ns
     return dot(r,SA_F64[0., 0., k_eff])
 end
 
-function phase_laser(r, t, phi_map, size, N, constants, k_eff)
+function phase_laser(r, k_eff, t, phi_map, size, N, constants::Constants = Constants() )
     # phi_laser assumes pulse is instantaneous. Gravity gradients and finite pulse effects are ignored
     # Uses input phase map to get nearest phase value based on atom location
     kvec = [0., 0., k_eff]

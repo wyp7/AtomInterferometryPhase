@@ -1,6 +1,7 @@
 module AtomInterferometrySims
 
 export atom_phase_path_int, atom_phase_path_int_test, atom_phase_path_int_shear,Constants, simple_test, test_atom_phase_path_int, init_vel, init_pos
+export unity, GenerateIntensityMap
 export test_it
 using DifferentialEquations, Parameters, ParameterizedFunctions, LinearAlgebra
 using BenchmarkTools, Test, CSV, DataFrames, FastGaussQuadrature, StaticArrays
@@ -35,7 +36,13 @@ function test_it(x,y)
     return x+y+1000
 end
 
-unity(r::Vector{Float64}) = 1
+function unity(r::Vector{Float64})
+    return 1
+end
+
+function GenerateIntensityMap(r::Vector{Float64},shape::Function, params::Vector{Any})
+   return shape(r,params...) 
+end
 
 function atom_phase_path_int(r0::Vector{Float64}, v0::Vector{Float64}, t0::Float64, T::Float64, n::Real, constants::Constants = Constants())
     
@@ -550,5 +557,7 @@ function init_pos(R,num)
     
     return r_out
 end
+
+
 
 end #module

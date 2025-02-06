@@ -275,7 +275,7 @@ function atom_phase_path_int_shear(r0::Vector{Float64}, v0::Vector{Float64}, t0:
     ## Find the probability of an atom at these positions surviving n LMT orders (2x pulses each order)
     ## But wait, this is only the first half of the sequence, so its really only seeing n pulses
     pE = sin( (π/2) * int_map_func(rE[1:2]) )^(2*n)
-    pD = sin( (π/2) * int_map_func(rS[1:2]) )^(2*n)
+    pD = sin( (π/2) * int_map_func(rD[1:2]) )^(2*n)
 
     ## Roll a die for each position and see if it dies. If so, return NaNs to be excluded later
     if ( (rand(1)[1]>pB) || (rand(1)[1]>pC) ) 
